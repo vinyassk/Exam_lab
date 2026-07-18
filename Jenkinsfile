@@ -2,128 +2,146 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_USERNAME = 'vinyassk'
         DOCKER_IMAGE = "${DOCKERHUB_USERNAME}/react-cicd-app"
-        KUBERNETES_NAMESPACE = 'default'
-        KUBECONFIG = credentials('kubeconfig')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out source code from GitHub...'
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    extensions: [],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/vinyassk/Exam_lab.git',
-                        credentialsId: 'github-credentials'
-                    ]]
-                ])
+                echo '========================================='
+                echo '  STAGE 1: Checkout Source Code'
+                echo '========================================='
+                echo 'Pulling code from GitHub repository...'
+                git branch: 'main', url: 'https://github.com/vinyassk/Exam_lab.git'
+                echo 'Checkout completed successfully!'
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                echo 'Installing npm dependencies...'
+                echo '========================================='
+                echo '  STAGE 2: Install Dependencies'
+                echo '========================================='
                 sh '''
                     cd react-cicd-app
+                    echo "Installing npm packages..."
                     npm install
+                    echo "Dependencies installed successfully!"
                 '''
             }
         }
 
-        stage('Run Tests') {
+        stage('Lint') {
             steps {
-                echo 'Running tests...'
+                echo '========================================='
+                echo '  STAGE 3: Lint Check'
+                echo '========================================='
                 sh '''
                     cd react-cicd-app
-                    npm run lint || true
+                    echo "Running linter..."
+                    npm run lint || echo "Lint completed with warnings (non-blocking)"
                 '''
             }
         }
 
-        stage('Build React App') {
+        stage('Build') {
             steps {
-                echo 'Building React application...'
+                echo '========================================='
+                echo '  STAGE 4: Build React App'
+                echo '========================================='
                 sh '''
                     cd react-cicd-app
+                    echo "Building production bundle..."
                     npm run build
+                    echo "Build completed successfully!"
+                    echo "Build output:"
+                    ls -la dist/
                 '''
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Docker Build') {
             steps {
-                echo 'Building Docker image...'
-                script {
-                    docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
-                    docker.build("${DOCKER_IMAGE}:latest")
-                }
+                echo '========================================='
+                echo '  STAGE 5: Build Docker Image'
+                echo '========================================='
+                sh """
+                    echo "Building Docker image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                    docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} .
+                    docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                    echo "Docker image built successfully!"
+                    echo "Docker images:"
+                    docker images | grep react-cicd-app
+                """
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Docker Push') {
             steps {
-                echo 'Logging in to Docker Hub and pushing image...'
-                script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
-                        docker.image("${DOCKER_IMAGE}:${env.BUILD_NUMBER}").push()
-                        docker.image("${DOCKER_IMAGE}:latest").push()
-                    }
-                }
+                echo '========================================='
+                echo '  STAGE 6: Push to Docker Hub'
+                echo '========================================='
+                sh """
+                    echo "Logging in to Docker Hub..."
+                    echo "dockerhub-credentials" | docker login -u ${DOCKERHUB_USERNAME} --password-stdin
+                    echo "Pushing image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                    docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
+                    docker push ${DOCKER_IMAGE}:latest
+                    echo "Image pushed to Docker Hub successfully!"
+                """
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                echo 'Deploying to Kubernetes cluster...'
-                script {
-                    sh '''
-                        # Update the image tag in deployment manifest
-                        sed -i "s|image: .*|image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}|g" k8s/deployment.yaml
-
-                        # Apply Kubernetes manifests
-                        kubectl apply -f k8s/deployment.yaml
-                        kubectl apply -f k8s/service.yaml
-
-                        # Wait for deployment to be ready
-                        kubectl rollout status deployment/react-cicd-app -n ${KUBERNETES_NAMESPACE} --timeout=300s
-                    '''
-                }
+                echo '========================================='
+                echo '  STAGE 7: Kubernetes Deployment'
+                echo '========================================='
+                sh """
+                    echo "Updating deployment manifest with new image tag..."
+                    sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}|g' react-cicd-app/k8s/deployment.yaml
+                    echo "Applying Kubernetes manifests..."
+                    kubectl apply -f react-cicd-app/k8s/deployment.yaml
+                    kubectl apply -f react-cicd-app/k8s/service.yaml
+                    echo "Waiting for rollout to complete..."
+                    kubectl rollout status deployment/react-cicd-app --timeout=300s
+                    echo "Deployment completed successfully!"
+                """
             }
         }
     }
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
-            script {
-                sh '''
-                    echo "=== Deployment Summary ==="
-                    echo "Docker Image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                    echo "Docker Image: ${DOCKER_IMAGE}:latest"
-                    echo ""
-                    echo "=== Kubernetes Status ==="
-                    kubectl get pods -l app=react-cicd-app
-                    kubectl get svc react-cicd-service
-                '''
-            }
+            echo '========================================='
+            echo '   PIPELINE COMPLETED SUCCESSFULLY!     '
+            echo '========================================='
+            sh """
+                echo "--- Deployment Summary ---"
+                echo "Docker Image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                echo "Docker Image: ${DOCKER_IMAGE}:latest"
+                echo ""
+                echo "--- Kubernetes Status ---"
+                kubectl get pods -l app=react-cicd-app
+                kubectl get svc react-cicd-service
+                echo ""
+                echo "--- Application URL ---"
+                minikube service react-cicd-service --url || true
+            """
         }
         failure {
-            echo 'Pipeline failed!'
-            script {
-                sh '''
-                    echo "=== Debug Information ==="
-                    echo "Docker Image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                    echo ""
-                    echo "=== Kubernetes Status ==="
-                    kubectl get pods
-                    kubectl describe deployment react-cicd-app
-                '''
-            }
+            echo '========================================='
+            echo '       PIPELINE FAILED!                  '
+            echo '========================================='
+            sh """
+                echo "--- Debug Info ---"
+                echo "Checking pod status..."
+                kubectl get pods
+                echo ""
+                echo "Describing deployment..."
+                kubectl describe deployment react-cicd-app || true
+            """
         }
         always {
             echo 'Cleaning up workspace...'
