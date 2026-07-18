@@ -17,6 +17,7 @@ spec:
       containers:
         - name: react-cicd-app
           image: vinyassk/react-cicd-app:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
           resources:
