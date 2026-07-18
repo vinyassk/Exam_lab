@@ -4,6 +4,10 @@ pipeline {
     environment {
         DOCKERHUB_USERNAME = 'vinyassk'
         DOCKER_IMAGE = "${DOCKERHUB_USERNAME}/react-cicd-app"
+        DOCKER_HOST = 'tcp://192.168.49.2:2376'
+        DOCKER_TLS_VERIFY = '1'
+        DOCKER_CERT_PATH = '/tmp/.minikube/certs'
+        KUBECONFIG = '/tmp/kubeconfig_fixed'
     }
 
     stages {
@@ -82,13 +86,15 @@ pipeline {
                 echo '========================================='
                 echo '  STAGE 6: Push to Docker Hub'
                 echo '========================================='
-                sh """
-                    echo "Pushing to Docker Hub..."
-                    echo "vinu@1234" | docker login -u ${DOCKERHUB_USERNAME} --password-stdin
-                    docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                    docker push ${DOCKER_IMAGE}:latest
-                    echo "Push completed!"
-                """
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                        echo "Pushing to Docker Hub..."
+                        echo "\${DOCKER_PASS}" | docker login -u \${DOCKER_USER} --password-stdin
+                        docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE}:latest
+                        echo "Push completed!"
+                    """
+                }
             }
         }
 
@@ -99,9 +105,6 @@ pipeline {
                 echo '========================================='
                 sh """
                     export PATH="/tmp/node-v20.19.0-linux-x64/bin:\$PATH"
-                    export KUBECONFIG=/tmp/kubeconfig_fixed
-                    echo "Loading image into Minikube..."
-                    minikube image load ${DOCKER_IMAGE}:${env.BUILD_NUMBER} || true
                     echo "Updating deployment manifest..."
                     sed -i 's|image: .*|image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}|g' k8s/deployment.yaml
                     echo "Applying Kubernetes manifests..."
@@ -121,15 +124,8 @@ pipeline {
             echo '   PIPELINE COMPLETED SUCCESSFULLY!     '
             echo '========================================='
             sh """
-                export PATH="/tmp/node-v20.19.0-linux-x64/bin:\$PATH"
-                export KUBECONFIG=/tmp/kubeconfig_fixed
-                echo "--- Deployment Summary ---"
-                echo "Docker Image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                echo ""
-                echo "--- Kubernetes Status ---"
                 /tmp/kubectl get pods -l app=react-cicd-app
                 /tmp/kubectl get svc react-cicd-service
-                echo ""
                 echo "--- Application URL ---"
                 minikube service react-cicd-service --url || true
             """
@@ -138,10 +134,7 @@ pipeline {
             echo '========================================='
             echo '       PIPELINE FAILED!                  '
             echo '========================================='
-            sh """
-                export KUBECONFIG=/tmp/kubeconfig_fixed
-                /tmp/kubectl get pods || true
-            """
+            sh '/tmp/kubectl get pods || true'
         }
         always {
             echo 'Pipeline execution completed.'
