@@ -24,7 +24,7 @@ pipeline {
                 echo '  STAGE 2: Install Dependencies'
                 echo '========================================='
                 sh '''
-                    export PATH="/tmp/bin:/tmp:$PATH"
+                    export PATH="/tmp/node-v20.19.0-linux-x64/bin:$PATH"
                     node --version
                     npm --version
                     echo "Installing npm packages..."
@@ -40,7 +40,7 @@ pipeline {
                 echo '  STAGE 3: Lint Check'
                 echo '========================================='
                 sh '''
-                    export PATH="/tmp/bin:/tmp:$PATH"
+                    export PATH="/tmp/node-v20.19.0-linux-x64/bin:$PATH"
                     echo "Running linter..."
                     npm run lint
                 '''
@@ -53,7 +53,7 @@ pipeline {
                 echo '  STAGE 4: Build React App'
                 echo '========================================='
                 sh '''
-                    export PATH="/tmp/bin:/tmp:$PATH"
+                    export PATH="/tmp/node-v20.19.0-linux-x64/bin:$PATH"
                     echo "Building production bundle..."
                     npm run build
                     echo "Build completed!"
@@ -98,7 +98,7 @@ pipeline {
                 echo '  STAGE 7: Kubernetes Deployment'
                 echo '========================================='
                 sh """
-                    export PATH="/tmp/bin:/tmp:\$PATH"
+                    export PATH="/tmp/node-v20.19.0-linux-x64/bin:\$PATH"
                     export KUBECONFIG=/tmp/kubeconfig_fixed
                     echo "Loading image into Minikube..."
                     minikube image load ${DOCKER_IMAGE}:${env.BUILD_NUMBER} || true
@@ -121,7 +121,7 @@ pipeline {
             echo '   PIPELINE COMPLETED SUCCESSFULLY!     '
             echo '========================================='
             sh """
-                export PATH="/tmp/bin:/tmp:\$PATH"
+                export PATH="/tmp/node-v20.19.0-linux-x64/bin:\$PATH"
                 export KUBECONFIG=/tmp/kubeconfig_fixed
                 echo "--- Deployment Summary ---"
                 echo "Docker Image: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
