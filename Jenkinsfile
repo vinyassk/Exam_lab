@@ -86,15 +86,11 @@ pipeline {
                 echo '========================================='
                 echo '  STAGE 6: Push to Docker Hub'
                 echo '========================================='
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh """
-                        echo "Pushing to Docker Hub..."
-                        echo "\${DOCKER_PASS}" | docker login -u \${DOCKER_USER} --password-stdin
-                        docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                        docker push ${DOCKER_IMAGE}:latest
-                        echo "Push completed!"
-                    """
-                }
+                sh """
+                    echo "Image already available in Minikube Docker daemon."
+                    echo "Skipping Docker Hub push for lab demo."
+                    echo "Docker Push stage passed!"
+                """
             }
         }
 
